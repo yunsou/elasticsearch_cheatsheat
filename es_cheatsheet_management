@@ -1,0 +1,100 @@
+### cat api
+curl -XGET localhost:9200/_cat/allocation
+shards disk.indices disk.used disk.avail disk.total disk.percent host      ip        node
+     1         260b    47.3gb     43.4gb    100.7gb           46 127.0.0.1 127.0.0.1 CSUXak2
+	 
+curl -XGET localhost:9200/_cat/nodes
+curl -XGET localhost:9200/_cat/templates
+curl -XGET localhost:9200/_cat/tasks
+curl -XGET "localhost:9200/_cat/indices/${indexname}
+curl -XGET localhost:9200/_cat/segments/${indexname}
+curl -XGET localhost:9200/_cat/shards/${indexname}
+
+
+### set index
+curl -X PUT "localhost:9200/twitter/_settings" -H 'Content-Type: application/json' -d'
+{
+    "index" : {
+        "refresh_interval" : "-1"
+    }
+}
+'
+
+###reindex
+curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
+{
+  "source": {
+    "index": "akamai_service-d2019.04.12_2"
+  },
+  "dest": {
+    "index": "akamai_service-d2019.04.12"
+  }
+}
+'
+
+
+###segments optimize
+curl -X POST "localhost:9200/${indexname}/_forcemerge?max_num_segments=${number}"
+
+
+###templates
+curl -XGET localhost:9200/_cat/templates
+curl -XGET localhost:9200/_template/${templatename}
+
+
+###tasks
+curl -XGET localhost:9200/_cat/tasks
+curl -X GET "localhost:9200/_tasks"
+curl -X GET "localhost:9200/_tasks?nodes=nodeId1,nodeId2"
+curl -X GET "localhost:9200/_tasks?nodes=nodeId1,nodeId2&actions=cluster:*"
+
+###nodes
+curl -XGET localhost:9200/_nodes
+curl -XGET localhost:9200/_nodes/stats
+curl -XGET localhost:9200/_nodes/hot_threads
+
+
+###cluster
+curl -X GET "localhost:9200/_cluster/health"
+curl -X GET "localhost:9200/_cluster/state"
+curl -X GET "localhost:9200/_cluster/stats?human&pretty"
+curl -X GET "localhost:9200/_cluster/pending_tasks"
+curl -X GET "localhost:9200/_cluster/settings"
+
+curl -X PUT "localhost:9200/_cluster/settings" -H 'Content-Type: application/json' -d'
+{
+    "persistent" : {
+        "indices.recovery.max_bytes_per_sec" : "50mb"
+    }
+}
+'
+curl -X PUT "localhost:9200/_cluster/settings?flat_settings=true" -H 'Content-Type: application/json' -d'
+{
+    "transient" : {
+        "indices.recovery.max_bytes_per_sec" : "20mb"
+    }
+}
+'
+
+###reallocation shard 
+curl -X POST "localhost:9200/_cluster/reroute" -H 'Content-Type: application/json' -d'
+{
+    "commands" : [
+        {
+            "move" : {
+                "index" : "test", "shard" : 0,
+                "from_node" : "node1", "to_node" : "node2"
+            }
+        },
+        {
+          "allocate_replica" : {
+                "index" : "test", "shard" : 1,
+                "node" : "node3"
+          }
+        }
+    ]
+}
+'
+
+###json file bulk insert
+curl -H 'Content-Type: application/x-ndjson' -XPOST 'localhost:9200/shakespeare/doc/_bulk?pretty' --data-binary @shakespeare_6.0.json
