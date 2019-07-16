@@ -2,13 +2,41 @@
 curl -XGET localhost:9200/_cat/allocation
 shards disk.indices disk.used disk.avail disk.total disk.percent host      ip        node
      1         260b    47.3gb     43.4gb    100.7gb           46 127.0.0.1 127.0.0.1 CSUXak2
-	 
+     
 curl -XGET localhost:9200/_cat/nodes
 curl -XGET localhost:9200/_cat/templates
 curl -XGET localhost:9200/_cat/tasks
 curl -XGET "localhost:9200/_cat/indices/${indexname}
 curl -XGET localhost:9200/_cat/segments/${indexname}
 curl -XGET localhost:9200/_cat/shards/${indexname}
+
+### rolling restart
+curl -X PUT "localhost:9200/_cluster/settings" -H 'Content-Type: application/json' -d'
+{
+  "persistent": {
+    "cluster.routing.allocation.enable": "none"
+  }
+}
+'
+
+curl -X POST "localhost:9200/_flush/synced"
+
+stop elasticsearch
+
+start elasticsearch
+
+curl -X GET "localhost:9200/_cat/nodes"
+
+curl -X PUT "localhost:9200/_cluster/settings" -H 'Content-Type: application/json' -d'
+{
+  "persistent": {
+    "cluster.routing.allocation.enable": null
+  }
+}
+'
+
+curl -X GET "localhost:9200/_cat/health?v"
+
 
 
 ### set index
@@ -19,6 +47,34 @@ curl -X PUT "localhost:9200/twitter/_settings" -H 'Content-Type: application/jso
     }
 }
 '
+
+curl -X PUT "localhost:9200/twitter/_settings" -H 'Content-Type: application/json' -d'
+{
+    "index" : {
+        "number_of_replicas" : 0
+    }
+}
+'
+
+
+### alias index
+curl -X POST "localhost:9200/_aliases" -H 'Content-Type: application/json' -d'
+{
+    "actions" : [
+        { "remove" : { "index" : "itams-d2019.06.17", "alias" : "itams-latest" } }
+    ]
+}
+'
+
+curl -X POST "10.169.199.81:9200/_aliases" -H 'Content-Type: application/json' -d'
+{
+    "actions" : [
+        { "remove" : { "index" : "itams-d2019.06.12", "alias" : "itams-latest" } },
+      { "add" : { "index" : "itams-d2019.06.13", "alias" : "itams-latest" } }
+    ]
+}
+'
+
 
 ###reindex
 curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
@@ -32,6 +88,21 @@ curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
 }
 '
 
+
+###reindex from remote cluster
+curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
+{
+  "source": {
+    "remote":{
+        "host": "http://10.169.199.8:9200"
+    },
+    "index": "dbslowlog-d2019.03.*"
+  },
+  "dest": {
+    "index": "dbslowlog-d2019.03"
+  }
+}
+'
 
 ###segments optimize
 curl -X POST "localhost:9200/${indexname}/_forcemerge?max_num_segments=${number}"
@@ -98,3 +169,23 @@ curl -X POST "localhost:9200/_cluster/reroute" -H 'Content-Type: application/jso
 
 ###json file bulk insert
 curl -H 'Content-Type: application/x-ndjson' -XPOST 'localhost:9200/shakespeare/doc/_bulk?pretty' --data-binary @shakespeare_6.0.json
+
+
+
+###setting remote cluster
+curl -X PUT "localhost:9200/_cluster/settings" -H 'Content-Type: application/json' -d'
+{
+  "persistent": {
+    "search": {
+      "remote": {
+        "loginfra_cold": {
+          "seeds": [
+             "10.169.199.12:9300","10.169.199.13:9300"
+          ],          
+          "skip_unavailable": true
+  }
+      }
+    }
+  }
+}
+'
