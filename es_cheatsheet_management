@@ -20,24 +20,16 @@ curl -X PUT "localhost:9200/_cluster/settings" -H 'Content-Type: application/jso
 '
 
 curl -X POST "localhost:9200/_flush/synced"
-
-stop elasticsearch
-
-start elasticsearch
-
+systemctl stop elasticsearch
+systemctl start elasticsearch
 curl -X GET "localhost:9200/_cat/nodes"
-
 curl -X PUT "localhost:9200/_cluster/settings" -H 'Content-Type: application/json' -d'
 {
   "persistent": {
     "cluster.routing.allocation.enable": null
   }
-}
-'
-
+}'
 curl -X GET "localhost:9200/_cat/health?v"
-
-
 
 ### set index
 curl -X PUT "localhost:9200/twitter/_settings" -H 'Content-Type: application/json' -d'
@@ -61,7 +53,7 @@ curl -X PUT "localhost:9200/twitter/_settings" -H 'Content-Type: application/jso
 curl -X POST "localhost:9200/_aliases" -H 'Content-Type: application/json' -d'
 {
     "actions" : [
-        { "remove" : { "index" : "itams-d2019.06.17", "alias" : "itams-latest" } }
+        { "remove" : { "index" : "twitter-d2019.06.17", "alias" : "itams-latest" } }
     ]
 }
 '
@@ -69,25 +61,32 @@ curl -X POST "localhost:9200/_aliases" -H 'Content-Type: application/json' -d'
 curl -X POST "10.169.199.81:9200/_aliases" -H 'Content-Type: application/json' -d'
 {
     "actions" : [
-        { "remove" : { "index" : "itams-d2019.06.12", "alias" : "itams-latest" } },
-      { "add" : { "index" : "itams-d2019.06.13", "alias" : "itams-latest" } }
+        { "add" : { "index" : "twitter-d2019.09.02", "alias" : "itams-latest" } }
     ]
 }
 '
 
-
-###reindex
-curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
+curl -X POST "10.169.199.81:9200/_aliases" -H 'Content-Type: application/json' -d'
 {
-  "source": {
-    "index": "akamai_service-d2019.04.12_2"
-  },
-  "dest": {
-    "index": "akamai_service-d2019.04.12"
-  }
+    "actions" : [
+        { "remove" : { "index" : "twitter-d2019.06.12", "alias" : "twitter-latest" } },
+      { "add" : { "index" : "twitter-d2019.06.13", "alias" : "twitter-latest" } }
+    ]
 }
 '
 
+###reindex
+### -> recommend no replica shard, long range refresh_interval
+curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
+{
+  "source": {
+    "index": "twitter-d2019.09.02_reindex"
+  },
+  "dest": {
+    "index": "twitter-d2019.09.02"
+  }
+}
+'
 
 ###reindex from remote cluster
 curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
@@ -96,10 +95,10 @@ curl -X POST "localhost:9200/_reindex" -H 'Content-Type: application/json' -d'
     "remote":{
         "host": "http://10.169.199.8:9200"
     },
-    "index": "dbslowlog-d2019.03.*"
+    "index": "twitter-d2019.03.*"
   },
   "dest": {
-    "index": "dbslowlog-d2019.03"
+    "index": "twitter-d2019.03"
   }
 }
 '
@@ -153,14 +152,21 @@ curl -X POST "localhost:9200/_cluster/reroute" -H 'Content-Type: application/jso
     "commands" : [
         {
             "move" : {
-                "index" : "test", "shard" : 0,
-                "from_node" : "node1", "to_node" : "node2"
+                "index" : "netflow-d2019.08.27", "shard" : 5,
+                "from_node" : "ES09", "to_node" : "ES08"
             }
-        },
+        }
+    ]
+}
+'
+
+curl -X POST "localhost:9200/_cluster/reroute?pretty" -H 'Content-Type: application/json' -d'
+{
+    "commands" : [
         {
           "allocate_replica" : {
-                "index" : "test", "shard" : 1,
-                "node" : "node3"
+                "index" : "twitter-d2019.08.30", "shard" : 0,
+                "node" : "ES08"
           }
         }
     ]
@@ -178,7 +184,7 @@ curl -X PUT "localhost:9200/_cluster/settings" -H 'Content-Type: application/jso
   "persistent": {
     "search": {
       "remote": {
-        "loginfra_cold": {
+        "es_cold": {
           "seeds": [
              "10.169.199.12:9300","10.169.199.13:9300"
           ],          
@@ -187,5 +193,38 @@ curl -X PUT "localhost:9200/_cluster/settings" -H 'Content-Type: application/jso
       }
     }
   }
+}
+'
+
+###disable xpack
+xpack.security.enabled: false // elasticsearch.yml, kibana.yml
+xpack.monitoring.enabled: false // elasticsearch.yml, kibana.yml
+xpack.graph.enabled: false //elasticsearch.yml, kibana.yml
+xpack.watcher.enabled: false // elasticsearch.yml
+xpack.reporting.enabeld: false // kibana.yml
+
+
+###delete by query
+curl -X POST "localhost:9200/twitter-d2019.08.20/_delete_by_query?pretty" -H 'Content-Type: application/json' -d'
+{
+  "query": { 
+    "match": {
+      "distributor": "aws"
+    }
+  }
+}
+'
+
+
+###get index pattern at kibana
+###
+curl -X GET "localhost:9200/_search?pretty" -H 'Content-Type: application/json' -d'
+{
+    "_source": ["index-pattern.title"],
+	"query": {
+        "term": {
+			"type": "index-pattern"
+		}
+    }
 }
 '
